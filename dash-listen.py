@@ -1,12 +1,23 @@
-# The following script is an adjusted version of Aaron Bell's script
-# http://www.aaronbell.com/how-to-hack-amazons-wifi-button/
-
-# improvement from original script:
-# - New dash buttons can be added by just adding a new nickname to the macs dictionary
-# - Will not trigger multiple events for one press (see trigger_timeout below)
-
-# if you want to run this script as an ubuntu service, check out
-# http://askubuntu.com/questions/175751/how-do-i-run-a-python-script-in-the-background-and-restart-it-after-a-crash
+# The following script is forked from zippocage/dash_hack:
+#   https://github.com/zippocage/dash_hack
+# which is an adjusted version of Aaron Bell's script:
+#   http://www.aaronbell.com/how-to-hack-amazons-wifi-button/
+# If you want to run this script as an ubuntu service, check out:
+#   http://askubuntu.com/questions/175751/how-do-i-run-a-python-script-in-the-background-and-restart-it-after-a-crash
+#
+# How to use:
+#   1. Setup an account in If This Then That (IFTTT): http://www.ifttt.com/
+#   2. Create a new recipe using the Maker Channel for the IF command:
+#       a. https://ifttt.com/maker
+#   3. Update the MAKER_KEY variable below.
+#   4. Connect your Amazon Dash Button to your network but skip the last step of the setup where they ask you which
+#      product you want the button to purchase.
+#   5. Run this program via `python dash-listen.py`.
+#   6. Push the Amazon Dash Button and take note of its Mac Address.
+#   7. Overwrite the sample Mac Addresses with your Amazon Dash Button(s) Mac Address(es).
+#   8. Re-run `python dash-listen.py`.
+#   9. Now you can configure IFTTT to do anything you want when you push the button.
+#
 
 import socket
 import struct
@@ -17,44 +28,42 @@ import urllib2
 import datetime
 
 # Use your own IFTTT key, not this fake one
-ifttt_key = 'fakekey'
-# the number of seconds after a dash button is pressed that it will not trigger another event
-# the reason is that dash buttons may try to send ARP onto the network during several seconds
-# before giving up
-trigger_timeout = 5
+MAKER_KEY = 'dzwVhf04I_s2aL0VhD9Vj'
 
-# Replace these fake MAC addresses and nicknames with your own
-# the nickname of the dash buttons is what will be used as the event name
-# when triggering the IFTTT maker channel, e.g. https://maker.ifttt.com/trigger/<nickname>/with/key/<ifttt_key>
-macs = {
-    '747500000001' : 'dash_gerber',
+# Replace these fake MAC addresses on the left and the names on the right with your own.
+# The name of the dash buttons are what will be used when triggering the Maker event like so:
+#   https://maker.ifttt.com/trigger/<DASH_BUTTON_NICKNAME>/with/key/<MAKER_KEY>
+MAC_ADDRESSES = {
+    '747500000001' : 'DASH_BUTTON_NICKNAME',
     '747500000002' : 'dash_elements1',
     '747500000003' : 'dash_elements2',
     '747500000004' : 'dash_cottonelle',
     '747500000005' : 'dash_huggies'
 }
 
-# for recording the last time the event was triggered to avoid multiple events fired
-# for one press on the dash button
+# How many seconds should we wait before another button push triggers the event?
+trigger_timeout = 5
+
+# Records the last time the event was triggered
 trigger_time = {}
 
-# Trigger a IFTTT URL where the event is the same as the strings in macs (e.g. dash_gerber)
+# Trigger an IFTTT URL where the event is the same as the strings in MAC_ADDRESSES
 # Body includes JSON with timestamp values.
-def trigger_url_generic(trigger):
+def trigger_url(trigger):
     data = '{ "value1" : "' + time.strftime("%Y-%m-%d") + '", "value2" : "' + time.strftime("%H:%M") + '" }'
-    req = urllib2.Request( 'https://maker.ifttt.com/trigger/'+trigger+'/with/key/'+ifttt_key , data, {'Content-Type': 'application/json'})
+    req = urllib2.Request( 'https://maker.ifttt.com/trigger/'+trigger+'/with/key/'+MAKER_KEY , data, {'Content-Type': 'application/json'})
     f = urllib2.urlopen(req)
     response = f.read()
     f.close()
     return response
 
 def record_trigger(trigger):
-    print 'triggering '+ trigger +' event, response: ' + trigger_url_generic(trigger)
+    print 'Triggering '+ trigger +' event, response: ' + trigger_url(trigger)
 
 def is_within_secs(last_time, diff):
     return (datetime.datetime.now() - last_time).total_seconds() < (diff +1)
 
-# check if event has triggered within the timeout already
+# Check if the event has triggered within the timeout already
 def has_already_triggered(trigger):
     global trigger_time
     
@@ -64,8 +73,6 @@ def has_already_triggered(trigger):
 
     trigger_time[trigger] = datetime.datetime.now()
     return False
-
-
 
 rawSocket = socket.socket(socket.AF_PACKET, socket.SOCK_RAW, socket.htons(0x0003))
 
@@ -82,12 +89,12 @@ while True:
     source_mac = binascii.hexlify(arp_detailed[5])
     source_ip = socket.inet_ntoa(arp_detailed[6])
     dest_ip = socket.inet_ntoa(arp_detailed[8])
-    if source_mac in macs:
-        
-        if has_already_triggered(macs[source_mac]):
-            print "Culled duplicate trigger " + macs[source_mac]
+    if source_mac in MAC_ADDRESSES:
+
+        if has_already_triggered(MAC_ADDRESSES[source_mac]):
+            print "Culled duplicate trigger " + MAC_ADDRESSES[source_mac]
         else:
-            record_trigger(macs[source_mac])
+            record_trigger(MAC_ADDRESSES[source_mac])
 
     elif source_ip == '0.0.0.0':
-        print "Unknown dash button detected with MAC " + source_mac
+        print "Dash button detected with MAC ADDRESS " + source_mac
